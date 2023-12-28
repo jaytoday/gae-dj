@@ -2,23 +2,26 @@
 #coding=utf-8
 
 import cgi
-import re
 import logging
-from urllib import unquote,quote
+import os
+import re
+from urllib import unquote, quote, urlencode
 from datetime import datetime
 import wsgiref.handlers
 from google.appengine.ext import webapp, db
 from google.appengine.ext.webapp import template
 from google.appengine.ext.webapp.util import login_required
-from google.appengine.api import users
-from google.appengine.api import memcache
+from google.appengine.api import users,memcache,urlfetch
+from google.appengine.api.urlfetch import InvalidURLError,\
+        DownloadError
 import simplejson
+from doc import readme
 
 class Modinfo(db.Model):
     acc = db.UserProperty()
     djname = db.StringProperty()
     keys = db.StringListProperty()
-    # 'owner', 'author', whatever
+    # 'owner', 'author', anyelse
     canwrite = db.StringProperty()
     canedit= db.StringProperty()
     canmodify = db.StringProperty()
@@ -29,6 +32,12 @@ class Record(db.Expando):
     djauthor = db.UserProperty()
 
 op_map = {'gt':'>', 'lt':'<', 'in':'IN', 'eq':'='}
+met_map = {'GET':urlfetch.GET,
+            'POST':urlfetch.POST,
+            'HEAD':urlfetch.HEAD,
+            'PUT':urlfetch.PUT,
+            'DELETE':urlfetch.DELETE,
+            }
 err_map = {1:'not enough arguments',
            2:'cannot modify the model,maybe need login',
            3:'need some parameters',
@@ -39,6 +48,10 @@ err_map = {1:'not enough arguments',
            8:'you cannot delete the record',
            9:'contains a field name that is not allowed',
            10:'error when querying data',
+           11:'url is required',
+           12:'invalid url',
+           13:'error when downloading',
+           14:'error when fetching the url',
           }
 
 def greeting(user, redir='/'):
@@ -205,6 +218,7 @@ def handle_delete(request):
 
 @needparas(2)
 def handle_model(request):
+    user = users.GetCurrentUser()
     modname = request.paras[1]
     info = authmod(modname)
     #logging.info(info)
@@ -222,6 +236,40 @@ def handle_model(request):
     m.put()
     memcache.delete('modinfo:'+modname)
     return msg(0)
+
+def handle_fetch(request):
+    data = request.get('data','{}')
+    data = simplejson.loads(data)
+    url = data.get('url',None)
+    if url is None:
+        return msg(11)
+    met = data.get('method',None)
+    fetchreq = {'url':url,'method':met_map.get(met, urlfetch.GET)}
+    fields = data.get('fields',None)
+    headers = data.get('headers',None)
+    codec = data.get('decode',None)
+    if fields is not None:
+        fetchreq['payload'] = urlencode(fields)
+    if headers is not None:
+        fetchreq['headers'] = headers
+    try:
+        result = urlfetch.fetch(**fetchreq)
+    except InvalidURLError:
+        return msg(12,url=url)
+    except DownloadError:
+        return msg(13,url=url)
+    except:
+        return msg(14,url=url)
+    if codec is None:
+        content = result.content
+    else:
+        try:
+            content = result.content.decode(codec)
+        except:
+            content = result.content
+
+    return {'content':content,'status_code':result.status_code,
+            'truncated':result.content_was_truncated}
 
 class AllHandler(webapp.RequestHandler):
     def jsout(self,json):
@@ -255,9 +303,26 @@ class ModelHandler(AllHandler):
     def get(self):
         self.jsout(handle_model(self.request))
 
+class FetchHandler(AllHandler):
+    def get(self):
+        self.jsout(handle_fetch(self.request))
+
+    def post(self):
+        self.jsout(handle_fetch(self.request))
+
+class ProfileHandler(AllHandler):
+    def get(self):
+        user = users.GetCurrentUser()
+        name = user and user.nickname() or ''
+        loginurl = 'http://'+os.environ['HTTP_HOST']
+        self.jsout({'user':name,'loginurl':loginurl})
+        #for name in os.environ.keys():
+        #    self.response.out.write("%s = %s<br />\n" % (name, os.environ[name]))
+
 class MainHandler(webapp.RequestHandler):
     def get(self):
         self.response.out.write(greeting(users.GetCurrentUser()))
+        self.response.out.write(readme())
 
 def main():
     application = webapp.WSGIApplication([('/', MainHandler),
@@ -266,6 +331,8 @@ def main():
                                     ('/view/.*', ViewHandler),
                                     ('/model/.*',ModelHandler),
                                     ('/modify/.*',ModifyHandler),
+                                    ('/fetch.*',FetchHandler),
+                                    ('/profile.*',ProfileHandler),
                                     ('/.*',MainHandler),
                                         ], debug=True)
     wsgiref.handlers.CGIHandler().run(application)

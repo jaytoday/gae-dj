@@ -1,0 +1,28 @@
+<html>
+<head>
+<script type="text/javascript" src="/static/jquery.js"></script>
+<script type="text/javascript" src="/static/gae-dj.js"></script>
+<script type="text/javascript">
+function tr(){
+    if(window.console && window.console.info){$(arguments).each(function(){console.info(this)})}; 
+};
+
+var dj = new Gaedj();
+//dj.send('fetch?data={"url":"http://jiwai.de/public_timeline/","decode":"utf-8"}',
+dj.send('fetch?data={"url":"http://g.cn","decode":"gbk"}',
+    function(r){
+    $('#con').html(r.content.replace(/script/g,'em'))
+    }
+)
+</script>
+<style type="text/css">
+    em{display:none}
+    #con{border:3px dashed #999;}
+</style>
+</head>
+<body>
+    <h1>Grab the page and display below:</h1>
+<div id="con">
+</div>
+</body>
+</html>

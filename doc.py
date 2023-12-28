@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+#coding=utf-8
+
+def readme():
+    return '''
+<pre>
 GAE-DJ implemented a RESTful api for GAE database writing/reading and 
 also for other GAE funny things like url fetching.
 
@@ -60,16 +66,21 @@ get /profile
 
 ********************how to use js client******************
 
-just check /static/*.html as demos!
 
-<script type="text/javascript" src="/static/gae-dj.js"></script>
+&lt;script type="text/javascript" src="/static/gae-dj.js"&gt;&lt;/script&gt;
 
 var dj = new Gaedj();
 dj.send('model/mm?keys=name,height',function(r){
     alert('try to make a model:'+r.success)
 });
 
-dj.send('fetch?data={"url":"http://g.cn/", "decode":"gbk"}',function(r){
+dj.send('fetch?data={"url":"http://g.cn/","decode":"gbk"}',function(r){
         $('#con').html(r.content)
 })
+</pre>
+just check /static/*.html as demos!
 
+<a href='/static/test.html'>data opreation demo</a> | 
+<a href='/static/fetch.html>fetch demo</a>
+
+'''
